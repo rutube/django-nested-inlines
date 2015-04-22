@@ -1,6 +1,10 @@
+# coding: utf-8
+
+from django.core.urlresolvers import reverse
 from django.contrib.admin.options import (ModelAdmin, InlineModelAdmin,
-    csrf_protect_m, models, transaction, all_valid,
-    PermissionDenied, unquote, escape, Http404, reverse)
+                                          csrf_protect_m, models, transaction,
+                                          all_valid, PermissionDenied, unquote,
+                                          escape, Http404)
 # Fix to make Django 1.5 compatible, maintain backwards compatibility
 try:
     from django.contrib.admin.options import force_unicode
@@ -13,14 +17,23 @@ from django.utils.translation import ugettext as _
 from forms import BaseNestedModelForm, BaseNestedInlineFormSet
 from helpers import AdminErrorList
 
+
 class NestedModelAdmin(ModelAdmin):
-    class Media:
+
+    class Media(object):
         css = {'all': ('admin/css/nested.css',)}
         js = ('admin/js/nested.js',)
         
     def get_form(self, request, obj=None, **kwargs):
+        if not self.form:
+            form = BaseNestedModelForm
+        elif issubclass(self.form, BaseNestedModelForm):
+            form = self.form
+        else:
+            raise TypeError('%s must be derived from BaseNestedModelForm' %
+                            self.form)
         return super(NestedModelAdmin, self).get_form(
-            request, obj, form=BaseNestedModelForm, **kwargs)
+            request, obj, form=form, **kwargs)
         
     def get_inline_instances(self, request, obj=None):
         inline_instances = []
@@ -50,6 +63,19 @@ class NestedModelAdmin(ModelAdmin):
             if hasattr(form, 'nested_formsets') and form not in deleted_forms:
                 for nested_formset in form.nested_formsets:
                     self.save_formset(request, form, nested_formset, change)
+
+    def save_related(self, request, form, formsets, change):
+        """
+        Given the ``HttpRequest``, the parent ``ModelForm`` instance, the
+        list of inline formsets and a boolean value based on whether the
+        parent is being added or changed, save the related objects to the
+        database. Note that at this point save_form() and save_model() have
+        already been called.
+        """
+        form.save_m2m()
+        for formset in formsets:
+            self.save_formset(request, form, formset, change=change)
+
                     
     def add_nested_inline_formsets(self, request, inline, formset, depth=0):
         if depth > 5:
@@ -96,9 +122,10 @@ class NestedModelAdmin(ModelAdmin):
                     instance = None
                 fieldsets = list(nested_inline.get_fieldsets(request))
                 readonly = list(nested_inline.get_readonly_fields(request))
-                prepopulated = dict(nested_inline.get_prepopulated_fields(request))
-                wrapped_nested_formset = InlineAdminFormSet(nested_inline, nested_formset,
-                    fieldsets, prepopulated, readonly, model_admin=self)
+                wrapped_nested_formset = InlineAdminFormSet(nested_inline,
+                                                            nested_formset,
+                                                            fieldsets, readonly,
+                                                            model_admin=self)
                 wrapped_nested_formsets.append(wrapped_nested_formset)
                 media = get_media(wrapped_nested_formset.media)
                 if nested_inline.inlines:
@@ -119,6 +146,12 @@ class NestedModelAdmin(ModelAdmin):
                     if not self.all_valid_with_nesting(form.nested_formsets):
                         return False
         return True
+
+    def get_prepopulated_fields(self, request, obj=None):
+        """
+        Hook for specifying custom prepopulated fields.
+        """
+        return self.prepopulated_fields
     
     @csrf_protect_m
     @transaction.commit_on_success
@@ -289,9 +322,9 @@ class NestedModelAdmin(ModelAdmin):
         for inline, formset in zip(inline_instances, formsets):
             fieldsets = list(inline.get_fieldsets(request, obj))
             readonly = list(inline.get_readonly_fields(request, obj))
-            prepopulated = dict(inline.get_prepopulated_fields(request, obj))
-            inline_admin_formset = InlineAdminFormSet(inline, formset,
-                fieldsets, prepopulated, readonly, model_admin=self)
+            form_set = InlineAdminFormSet(inline, formset, fieldsets, readonly,
+                                          model_admin=self)
+            inline_admin_formset = form_set
             inline_admin_formsets.append(inline_admin_formset)
             media = media + inline_admin_formset.media
             if inline.inlines:
@@ -333,10 +366,52 @@ class NestedInlineModelAdmin(InlineModelAdmin):
             inline_instances.append(inline)
 
         return inline_instances
+
+    def has_add_permission(self, request):
+        """
+        Returns True if the given request has permission to add an object.
+        Can be overriden by the user in subclasses.
+        """
+        opts = self.opts
+        return request.user.has_perm(opts.app_label + '.' + opts.get_add_permission())
+
+    def has_change_permission(self, request, obj=None):
+        """
+        Returns True if the given request has permission to change the given
+        Django model instance, the default implementation doesn't examine the
+        `obj` parameter.
+
+        Can be overriden by the user in subclasses. In such case it should
+        return True if the given request has permission to change the `obj`
+        model instance. If `obj` is None, this should return True if the given
+        request has permission to change *any* object of the given type.
+        """
+        opts = self.opts
+        return request.user.has_perm(opts.app_label + '.' + opts.get_change_permission())
+
+    def has_delete_permission(self, request, obj=None):
+        """
+        Returns True if the given request has permission to change the given
+        Django model instance, the default implementation doesn't examine the
+        `obj` parameter.
+
+        Can be overriden by the user in subclasses. In such case it should
+        return True if the given request has permission to delete the `obj`
+        model instance. If `obj` is None, this should return True if the given
+        request has permission to delete *any* object of the given type.
+        """
+        opts = self.opts
+        return request.user.has_perm(opts.app_label + '.' + opts.get_delete_permission())
     
     def get_formsets(self, request, obj=None):
         for inline in self.get_inline_instances(request):
             yield inline.get_formset(request, obj)
+
+    def get_prepopulated_fields(self, request, obj=None):
+        """
+        Hook for specifying custom prepopulated fields.
+        """
+        return self.prepopulated_fields
 
 class NestedStackedInline(NestedInlineModelAdmin):
     template = 'admin/edit_inline/stacked.html'
