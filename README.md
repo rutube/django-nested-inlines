@@ -1,5 +1,7 @@
 # django-nested-inlines
 
+**This is a backport for Django 1.3 forked from https://github.com/Soaa-/django-nested-inlines** 
+
 ## Overview
 
 [Django issue #9025](http://code.djangoproject.com/ticket/9025)
