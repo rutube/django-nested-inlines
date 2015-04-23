@@ -1,0 +1,2 @@
+recursive-include nested_inlines/templates *
+recursive-include nested_inlines/static *
