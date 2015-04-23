@@ -22,7 +22,7 @@ class NestedModelAdmin(ModelAdmin):
 
     class Media(object):
         css = {'all': ('admin/css/nested.css',)}
-        js = ('admin/js/nested.js',)
+        js = ('admin/js/inlines.min.js',)
         
     def get_form(self, request, obj=None, **kwargs):
         if not self.form:
