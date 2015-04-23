@@ -226,9 +226,8 @@ class NestedModelAdmin(ModelAdmin):
         for inline, formset in zip(inline_instances, formsets):
             fieldsets = list(inline.get_fieldsets(request))
             readonly = list(inline.get_readonly_fields(request))
-            prepopulated = dict(inline.get_prepopulated_fields(request))
             inline_admin_formset = InlineAdminFormSet(inline, formset,
-                fieldsets, prepopulated, readonly, model_admin=self)
+                fieldsets, readonly, model_admin=self)
             inline_admin_formsets.append(inline_admin_formset)
             media = media + inline_admin_formset.media
             if inline.inlines:
